@@ -46,16 +46,20 @@ And then visit the URL shown. Make sure to access it correctly, e.g. on Lambda u
 
 ---
 
-A few more notes:
+## Notes
 
-- The code will run just fine on the Ampere 8XA100 GPU node as well, but a bit slower.
-- All code will run just fine on even a single GPU by omitting `torchrun`, and will produce ~identical results (code will automatically switch to gradient accumulation), but you'll have to wait 8 times longer.
-- If your GPU(s) have less than 80GB, you'll have to tune some of the hyperparameters or you will OOM / run out of VRAM. Look for `--device_batch_size` in the scripts and reduce it until things fit. E.g. from 32 (default) to 16, 8, 4, 2, or even 1. Less than that you'll have to know a bit more what you're doing and get more creative.
-- Most of the code is fairly vanilla PyTorch so it should run on anything that supports that - xpu, mps, or etc, but I haven't personally exercised all of these code paths so there might be sharp edges.
+- Works on Ampere 8XA100 GPU nodes, slightly slower than H100 nodes.
+
+- Can run on a single GPU by omitting torchrun (training will take ~8x longer).
+
+- For GPUs <80GB VRAM, tune --device_batch_size in scripts to avoid OOM errors.
+
+- Code is vanilla PyTorch and should run on any compatible device (xpu, mps, etc.).
 
 ## Research
 
-If you are a researcher and wish to help improve nanochat, two scripts of interest are [runs/scaling_laws.sh](runs/scaling_laws.sh) and [runs/miniseries.sh](runs/miniseries.sh). See [Jan 7 miniseries v1](https://github.com/karpathy/nanochat/discussions/420) for related documentation. For quick experimentation (~5 min pretraining runs) my favorite scale is to train a 12-layer model (GPT-1 sized), e.g. like this:
+For experimentation, check runs/scaling_laws.sh and runs/miniseries.sh
+Quick pretraining (~5 min) can be done with smaller models:
 
 ```
 OMP_NUM_THREADS=1 torchrun --standalone --nproc_per_node=8 -m scripts.base_train -- \
@@ -67,82 +71,83 @@ OMP_NUM_THREADS=1 torchrun --standalone --nproc_per_node=8 -m scripts.base_train
     --save-every=-1 \
 ```
 
-This uses wandb (run name "d12"), only runs the CORE metric on last step, and it doesn't sample and save intermediate checkpoints. I like to change something in the code, re-run a d12 (or a d16 etc) and see if it helped, in an iteration loop. To see if a run helps, I like to monitor the wandb plots for:
+This uses wandb (run name "d12"), only evaluates CORE at the last step, and skips intermediate checkpoint saves. You can iterate by changing parameters and monitoring plots for:
 
-1. `val_bpb` (validation loss in vocab-size-invariant units of bits per byte) as a function of `step`, `total_training_time` and `total_training_flops`.
-2. `core_metric` (the DCLM CORE socre)
-3. VRAM utilization, `train/mfu` (Model FLOPS utilization), `train/tok_per_sec` (training throughput)
+1. val_bpb (validation loss)
 
-See an example [here](https://github.com/karpathy/nanochat/pull/498#issuecomment-3850720044).
+2. core_metric (CORE score)
 
-The important thing to note is that nanochat is written and configured around one single dial of complexity - the depth of the transformer. This single integer automatically determines all other hyperparameters (the width of the transformer, number of heads, learning rate adjustments, training horizons, weight decays, ...) so that the trained model comes out compute optimal. The idea is that the user doesn't have to think about or set any of this, they are simply asking for a smaller or bigger model using `--depth`, and everything "just works". By sweeping out the depth, you achieve the nanochat miniseries of compute optimal models at various sizes. GPT-2 capability model (which is of most interest at the moment) happens to be somewhere around d24-d26 range with the current code. But any candidate changes to the repo have to be principled enough that they work for all settings of depth.
+3. VRAM utilization, train/mfu (FLOPS), train/tok_per_sec (throughput)
 
 ## Running on CPU / MPS
 
-The script [runs/runcpu.sh](runs/runcpu.sh) shows a very simple example of running on CPU or Apple Silicon. It dramatically shrinks the LLM that is being trained to make things fit into a reasonable time interval of a few ten minutes of training. You will not get strong results in this way.
+runs/runcpu.sh shows an example on CPU or Apple Silicon. Models are shrunk for fast training (~10–20 minutes).
 
 ## Guides
 
-I've published a number of guides that might contain helpful information, most recent to least recent:
+Some helpful guides:
 
-- [Feb 1 2026: Beating GPT-2 for <<$100: the nanochat journey](https://github.com/karpathy/nanochat/discussions/481)
-- [Jan 7 miniseries v1](https://github.com/karpathy/nanochat/discussions/420) documents the first nanochat miniseries of models.
-- To add new abilities to nanochat, see [Guide: counting r in strawberry (and how to add abilities generally)](https://github.com/karpathy/nanochat/discussions/164).
-- To customize your nanochat, see [Guide: infusing identity to your nanochat](https://github.com/karpathy/nanochat/discussions/139) in Discussions, which describes how you can tune your nanochat's personality through synthetic data generation and mixing that data into the SFT stage.
-- [Oct 13 2025: original nanochat post](https://github.com/karpathy/nanochat/discussions/1) introducing nanochat, though now it contains some deprecated information and the model is a lot older (with worse results) than current master.
+- Beating GPT-2 for <$100: the nanochat journey
+
+- Miniseries v1
+
+- Adding new abilities: Counting R in strawberry
+
+- Customizing personality through synthetic data: Infusing identity
+
+
 
 ## File structure
 
 ```
 .
-├── LICENSE
 ├── README.md
 ├── dev
-│   ├── gen_synthetic_data.py       # Example synthetic data for identity
+│   ├── gen_synthetic_data.py       
 │   ├── generate_logo.html
 │   ├── nanochat.png
-│   └── repackage_data_reference.py # Pretraining data shard generation
+│   └── repackage_data_reference.py 
 ├── nanochat
-│   ├── __init__.py                 # empty
-│   ├── checkpoint_manager.py       # Save/Load model checkpoints
-│   ├── common.py                   # Misc small utilities, quality of life
-│   ├── core_eval.py                # Evaluates base model CORE score (DCLM paper)
-│   ├── dataloader.py               # Tokenizing Distributed Data Loader
-│   ├── dataset.py                  # Download/read utils for pretraining data
-│   ├── engine.py                   # Efficient model inference with KV Cache
-│   ├── execution.py                # Allows the LLM to execute Python code as tool
-│   ├── gpt.py                      # The GPT nn.Module Transformer
+│   ├── __init__.py                 
+│   ├── checkpoint_manager.py       
+│   ├── common.py                  
+│   ├── core_eval.py               
+│   ├── dataloader.py               
+│   ├── dataset.py                 
+│   ├── engine.py                   
+│   ├── execution.py   
+│   ├── gpt.py              
 │   ├── logo.svg
-│   ├── loss_eval.py                # Evaluate bits per byte (instead of loss)
-│   ├── optim.py                    # AdamW + Muon optimizer, 1GPU and distributed
-│   ├── report.py                   # Utilities for writing the nanochat Report
-│   ├── tokenizer.py                # BPE Tokenizer wrapper in style of GPT-4
-│   └── ui.html                     # HTML/CSS/JS for nanochat frontend
+│   ├── loss_eval.py               
+│   ├── optim.py                    
+│   ├── report.py                   
+│   ├── tokenizer.py               
+│   └── ui.html                     
 ├── pyproject.toml
 ├── runs
-│   ├── miniseries.sh               # Miniseries training script
-│   ├── runcpu.sh                   # Small example of how to run on CPU/MPS
-│   ├── scaling_laws.sh             # Scaling laws experiments
-│   └── speedrun.sh                 # Train the ~$100 nanochat d20
+│   ├── miniseries.sh               
+│   ├── runcpu.sh                  
+│   ├── scaling_laws.sh             
+│   └── speedrun.sh                 
 ├── scripts
-│   ├── base_eval.py                # Base model: CORE score, bits per byte, samples
-│   ├── base_train.py               # Base model: train
-│   ├── chat_cli.py                 # Chat model: talk to over CLI
-│   ├── chat_eval.py                # Chat model: eval tasks
-│   ├── chat_rl.py                  # Chat model: reinforcement learning
-│   ├── chat_sft.py                 # Chat model: train SFT
-│   ├── chat_web.py                 # Chat model: talk to over WebUI
-│   ├── tok_eval.py                 # Tokenizer: evaluate compression rate
-│   └── tok_train.py                # Tokenizer: train it
+│   ├── base_eval.py               
+│   ├── base_train.py               
+│   ├── chat_cli.py                
+│   ├── chat_eval.py                
+│   ├── chat_rl.py                  
+│   ├── chat_sft.py               
+│   ├── chat_web.py                 
+│   ├── tok_eval.py         
+│   └── tok_train.py                
 ├── tasks
-│   ├── arc.py                      # Multiple choice science questions
-│   ├── common.py                   # TaskMixture | TaskSequence
-│   ├── customjson.py               # Make Task from arbitrary jsonl convos
-│   ├── gsm8k.py                    # 8K Grade School Math questions
-│   ├── humaneval.py                # Misnomer; Simple Python coding task
-│   ├── mmlu.py                     # Multiple choice questions, broad topics
-│   ├── smoltalk.py                 # Conglomerate dataset of SmolTalk from HF
-│   └── spellingbee.py              # Task teaching model to spell/count letters
+│   ├── arc.py                      
+│   ├── common.py                   
+│   ├── customjson.py              
+│   ├── gsm8k.py                   
+│   ├── humaneval.py                
+│   ├── mmlu.py                     
+│   ├── smoltalk.py                
+│   └── spellingbee.py              
 ├── tests
 │   └── test_engine.py
 └── uv.lock
@@ -150,18 +155,13 @@ I've published a number of guides that might contain helpful information, most r
 
 ## Contributing
 
-The goal of nanochat is to improve the state of the art in micro models that are accessible to work with end to end on budgets of < $1000 dollars. Accessibility is about overall cost but also about cognitive complexity - nanochat is not an exhaustively configurable LLM "framework"; there are no giant configuration objects, model factories, or if-then-else monsters in the code base. It is a single, cohesive, minimal, readable, hackable, maximally-forkable "strong baseline" codebase designed to run start to end and produce a ChatGPT model you can talk to. Currently, the most interesting part personally is speeding up the latency to GPT-2 (i.e. getting a CORE score above 0.256525). Currently this takes ~3 hours, but by improving the pretraining stage we can improve this further.
-
-Current AI policy: disclosure. When submitting a PR, please declare any parts that had substantial LLM contribution and that you have not written or that you do not fully understand.
+The goal of nanochat is to provide a minimal, end-to-end LLM framework that runs on budgets <$1000. It’s designed to be readable, hackable, and fully forkable, with a strong baseline. Improving pretraining and CORE score latency is the main focus.
 
 ## Acknowledgements
 
-- The name (nanochat) derives from my earlier project [nanoGPT](https://github.com/karpathy/nanoGPT), which only covered pretraining.
-- nanochat is also inspired by [modded-nanoGPT](https://github.com/KellerJordan/modded-nanogpt), which gamified the nanoGPT repo with clear metrics and a leaderboard, and borrows a lot of its ideas and some implementation for pretraining.
-- Thank you to [HuggingFace](https://huggingface.co/) for fineweb and smoltalk.
-- Thank you [Lambda](https://lambda.ai/service/gpu-cloud) for the compute used in developing this project.
-- Thank you to chief LLM whisperer 🧙‍♂️ Alec Radford for advice/guidance.
-- Thank you to the repo czar Sofie [@svlandeg](https://github.com/svlandeg) for help with managing issues, pull requests and discussions of nanochat.
+- Thank you to HuggingFace for datasets.
+- Thank you to Lambda for compute resources.
+- Thank you to contributors and community members for guidance and support.
 
 
 
