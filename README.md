@@ -1,5 +1,5 @@
-# nanochat
-Maintained and adapted by Pavani Jain.
+# Nanochat
+
 ![nanochat logo](dev/nanochat.png)
 ![scaling laws](dev/scaling_laws_jan26.png)
 
