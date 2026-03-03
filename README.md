@@ -163,18 +163,5 @@ Current AI policy: disclosure. When submitting a PR, please declare any parts th
 - Thank you to chief LLM whisperer 🧙‍♂️ Alec Radford for advice/guidance.
 - Thank you to the repo czar Sofie [@svlandeg](https://github.com/svlandeg) for help with managing issues, pull requests and discussions of nanochat.
 
-## Cite
-
-If you find nanochat helpful in your research cite simply as:
-
-```bibtex
-@misc{nanochat,
-  author = {Andrej Karpathy},
-  title = {nanochat: The best ChatGPT that \$100 can buy},
-  year = {2025},
-  publisher = {GitHub},
-  url = {https://github.com/karpathy/nanochat}
-}
-```
 
 
